@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Femto Bolt センサー検証ツール</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Noto+Sans+JP:wght@300;400;500;700&display=swap');
+  :root{--bg:#0b0d14;--panel:#111520;--panel2:#161b28;--border:#1e2a42;--accent:#00d4ff;--green:#00ff88;--amber:#ffaa00;--red:#ff4466;--text:#e8edf5;--muted:#5a6880;--label:#8899bb;}
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{background:var(--bg);color:var(--text);font-family:'Noto Sans JP',sans-serif;font-weight:300;display:flex;height:100vh;overflow:hidden;}
+  #sidebar{width:320px;min-width:320px;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;}
+  #sidebar-header{padding:18px 20px 12px;border-bottom:1px solid var(--border);background:var(--panel2);}
+  #sidebar-header h1{font-family:'Space Mono',monospace;font-size:13px;font-weight:700;letter-spacing:.15em;color:var(--accent);text-transform:uppercase;}
+  #sidebar-header p{font-size:11px;color:var(--muted);margin-top:3px;font-family:'Space Mono',monospace;}
+  .section{padding:14px 20px;border-bottom:1px solid var(--border);}
+  .section-title{font-size:10px;font-family:'Space Mono',monospace;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;display:flex;align-items:center;gap:8px;}
+  .section-title::after{content:'';flex:1;height:1px;background:var(--border);}
+  .control-row{margin-bottom:12px;}
+  .control-label{font-size:11px;color:var(--label);margin-bottom:5px;display:flex;justify-content:space-between;align-items:center;}
+  .control-value{font-family:'Space Mono',monospace;font-size:13px;color:var(--accent);font-weight:700;}
+  input[type=range]{width:100%;height:4px;background:var(--border);border-radius:2px;outline:none;-webkit-appearance:none;cursor:pointer;}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;background:var(--accent);border-radius:50%;cursor:pointer;box-shadow:0 0 8px rgba(0,212,255,.5);}
+  select{width:100%;background:var(--panel2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:6px;font-size:12px;font-family:'Noto Sans JP',sans-serif;outline:none;cursor:pointer;margin-top:4px;}
+  select:focus{border-color:var(--accent);}
+  .stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:4px;}
+  .stat-card{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:9px 11px;}
+  .stat-card.full{grid-column:1/-1;}
+  .stat-label{font-size:9px;font-family:'Space Mono',monospace;letter-spacing:.1em;color:var(--muted);text-transform:uppercase;margin-bottom:3px;}
+  .stat-val{font-size:14px;font-family:'Space Mono',monospace;font-weight:700;color:var(--green);}
+  .stat-val.warn{color:var(--amber);}.stat-val.info{color:var(--accent);}.stat-val.danger{color:var(--red);}
+  #person-status{margin-top:8px;padding:9px 12px;border-radius:8px;font-size:12px;font-weight:500;display:flex;align-items:center;gap:8px;transition:all .3s;}
+  #person-status.visible{background:rgba(0,255,136,.1);border:1px solid rgba(0,255,136,.3);color:var(--green);}
+  #person-status.partial{background:rgba(255,170,0,.1);border:1px solid rgba(255,170,0,.3);color:var(--amber);}
+  #person-status.hidden{background:rgba(255,68,102,.1);border:1px solid rgba(255,68,102,.3);color:var(--red);}
+  .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+  .dot.green{background:var(--green);box-shadow:0 0 6px var(--green);}
+  .dot.amber{background:var(--amber);box-shadow:0 0 6px var(--amber);}
+  .dot.red{background:var(--red);box-shadow:0 0 6px var(--red);}
+  .view-btns{display:flex;gap:6px;margin-top:4px;}
+  .view-btn{flex:1;padding:7px;background:var(--panel2);border:1px solid var(--border);color:var(--label);border-radius:6px;font-size:11px;font-family:'Space Mono',monospace;cursor:pointer;transition:all .2s;text-align:center;}
+  .view-btn:hover{border-color:var(--accent);color:var(--accent);}
+  .view-btn.active{background:rgba(0,212,255,.1);border-color:var(--accent);color:var(--accent);}
+  .spec-note{font-size:10px;color:var(--muted);line-height:1.6;margin-top:6px;}
+  .wall-hits{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;}
+  .wall-badge{font-size:10px;font-family:'Space Mono',monospace;padding:3px 8px;border-radius:4px;border:1px solid;transition:all .3s;}
+  .wall-badge.hit{background:rgba(255,220,0,.15);border-color:rgba(255,220,0,.6);color:#ffdd00;}
+  .wall-badge.nohit{background:transparent;border-color:var(--border);color:var(--muted);}
+  #main{flex:1;position:relative;overflow:hidden;}
+  #canvas3d{width:100%;height:100%;display:block;}
+  #hud{position:absolute;top:16px;right:16px;display:flex;flex-direction:column;gap:7px;pointer-events:none;}
+  .hud-tag{background:rgba(11,13,20,.8);border:1px solid var(--border);border-radius:6px;padding:5px 11px;font-family:'Space Mono',monospace;font-size:11px;color:var(--label);}
+  .hud-tag span{color:var(--accent);}
+  #legend{position:absolute;bottom:16px;right:16px;background:rgba(11,13,20,.85);border:1px solid var(--border);border-radius:10px;padding:11px 15px;}
+  .legend-item{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--label);margin-bottom:5px;}
+  .legend-item:last-child{margin-bottom:0;}
+  .legend-color{width:20px;height:4px;border-radius:2px;}
+  #controls-hint{position:absolute;bottom:16px;left:16px;background:rgba(11,13,20,.75);border:1px solid var(--border);border-radius:8px;padding:7px 13px;font-size:10px;color:var(--muted);font-family:'Space Mono',monospace;}
+  #mode-tag{position:absolute;top:16px;left:16px;background:rgba(124,58,237,.2);border:1px solid rgba(124,58,237,.5);border-radius:6px;padding:6px 14px;font-family:'Space Mono',monospace;font-size:11px;color:#a78bfa;pointer-events:none;}
+  #wall-flash{position:absolute;inset:0;pointer-events:none;border:0px solid #ffdd00;transition:border-width .15s,opacity .3s;opacity:0;}
+  #wall-flash.hit{border-width:5px;opacity:1;box-shadow:inset 0 0 50px rgba(255,220,0,.18);}
+  #sidebar::-webkit-scrollbar{width:4px;}#sidebar::-webkit-scrollbar-track{background:transparent;}#sidebar::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+  .num-row{display:flex;gap:6px;align-items:center;margin-top:5px;}
+  .num-row label{font-size:11px;color:var(--label);min-width:52px;}
+  .num-row input[type=number]{width:68px;background:var(--panel2);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:5px;font-size:12px;font-family:'Space Mono',monospace;outline:none;}
+  .num-row input[type=number]:focus{border-color:var(--accent);}
+  .num-row span{font-size:11px;color:var(--muted);}
+  .wall-toggles{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:6px;}
+  .wall-toggle{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--label);cursor:pointer;padding:5px 8px;border:1px solid var(--border);border-radius:5px;background:var(--panel2);transition:border-color .2s;}
+  .wall-toggle input{accent-color:var(--accent);width:13px;height:13px;cursor:pointer;}
+  .wall-toggle.on{border-color:rgba(0,212,255,.35);color:var(--accent);}
+</style>
+</head>
+<body>
+<div id="sidebar">
+  <div id="sidebar-header"><h1>Femto Bolt</h1><p>センサー視野検証ツール v2.1</p></div>
+
+  <div class="section">
+    <div class="section-title">深度モード</div>
+    <select id="sel-mode">
+      <option value="nfov_ub">NFOV アンビン (640×576 / 75°×65° / 0.5–3.86m)</option>
+      <option value="nfov_2x2" selected>NFOV 2×2 ビニング (320×288 / 75°×65° / 0.5–5.46m)</option>
+      <option value="wfov_2x2">WFOV 2×2 ビニング (512×512 / 120°×120° / 0.25–2.88m)</option>
+      <option value="wfov_ub">WFOV アンビン (1024×1024 / 120°×120° / 0.25–2.21m)</option>
+    </select>
+    <div class="spec-note" id="spec-note">解像度: 320×288 ／ FPS: 5,15,25,30 ／ 露出: 12.8ms</div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">センサー設置</div>
+    <div class="control-row">
+      <div class="control-label"><span>設置高さ</span><span class="control-value" id="val-height">2500 mm</span></div>
+      <input type="range" id="sl-height" min="500" max="5000" step="50" value="2500">
+    </div>
+    <div class="control-row">
+      <div class="control-label"><span>俯角（下向き傾き）</span><span class="control-value" id="val-tilt">30°</span></div>
+      <input type="range" id="sl-tilt" min="0" max="89" step="1" value="30">
+    </div>
+    <div class="control-row">
+      <div class="control-label"><span>水平回転</span><span class="control-value" id="val-rotate">0°</span></div>
+      <input type="range" id="sl-rotate" min="-90" max="90" step="1" value="0">
+    </div>
+    <div class="control-row">
+      <div class="control-label"><span>部屋内X位置</span><span class="control-value" id="val-sx">0.0 m</span></div>
+      <input type="range" id="sl-sx" min="0" max="10" step="0.1" value="0">
+    </div>
+    <div class="control-row">
+      <div class="control-label"><span>部屋内Z位置</span><span class="control-value" id="val-sz">0.0 m</span></div>
+      <input type="range" id="sl-sz" min="0" max="10" step="0.1" value="0">
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">部屋サイズ</div>
+    <div class="num-row"><label>幅 (X)</label><input type="number" id="room-w" value="6" min="1" max="30" step="0.5"><span>m</span></div>
+    <div class="num-row"><label>奥行 (Z)</label><input type="number" id="room-d" value="8" min="1" max="30" step="0.5"><span>m</span></div>
+    <div class="num-row"><label>天井高</label><input type="number" id="room-h" value="3" min="1.5" max="10" step="0.1"><span>m</span></div>
+    <div style="margin-top:10px;">
+      <div class="section-title" style="margin-bottom:6px;">表示する壁</div>
+      <div class="wall-toggles">
+        <label class="wall-toggle on" id="lbl-front"><input type="checkbox" id="chk-front" checked> 正面壁</label>
+        <label class="wall-toggle on" id="lbl-back"><input type="checkbox" id="chk-back" checked> 背面壁</label>
+        <label class="wall-toggle on" id="lbl-left"><input type="checkbox" id="chk-left" checked> 左壁</label>
+        <label class="wall-toggle on" id="lbl-right"><input type="checkbox" id="chk-right" checked> 右壁</label>
+        <label class="wall-toggle on" id="lbl-ceil"><input type="checkbox" id="chk-ceil" checked> 天井</label>
+      </div>
+    </div>
+    <div style="margin-top:10px;">
+      <div class="stat-label" style="margin-bottom:4px;">視野が当たっている面</div>
+      <div class="wall-hits">
+        <div class="wall-badge nohit" id="badge-front">正面</div>
+        <div class="wall-badge nohit" id="badge-back">背面</div>
+        <div class="wall-badge nohit" id="badge-left">左</div>
+        <div class="wall-badge nohit" id="badge-right">右</div>
+        <div class="wall-badge nohit" id="badge-ceil">天井</div>
+        <div class="wall-badge nohit" id="badge-floor">床</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">検証対象（人）</div>
+    <div class="control-row">
+      <div class="control-label"><span>身長</span><span class="control-value" id="val-stature">170 cm</span></div>
+      <input type="range" id="sl-stature" min="100" max="220" step="1" value="170">
+    </div>
+    <div class="control-row">
+      <div class="control-label"><span>センサーからの距離</span><span class="control-value" id="val-pdist">3.0 m</span></div>
+      <input type="range" id="sl-pdist" min="0.1" max="15" step="0.1" value="3.0">
+    </div>
+    <div class="control-row">
+      <div class="control-label"><span>横方向オフセット</span><span class="control-value" id="val-poffset">0.0 m</span></div>
+      <input type="range" id="sl-poffset" min="-8" max="8" step="0.1" value="0">
+    </div>
+    <div id="person-status" class="visible"><div class="dot green"></div><span>全身がセンサー範囲内</span></div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">投影計算結果</div>
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-label">床面 奥行き</div><div class="stat-val info" id="st-depth">—</div></div>
+      <div class="stat-card"><div class="stat-label">中心 横幅</div><div class="stat-val info" id="st-width">—</div></div>
+      <div class="stat-card"><div class="stat-label">手前 限界</div><div class="stat-val warn" id="st-near">—</div></div>
+      <div class="stat-card"><div class="stat-label">奥 限界</div><div class="stat-val warn" id="st-far">—</div></div>
+      <div class="stat-card full"><div class="stat-label">ボディトラッキング有効範囲</div><div class="stat-val green" id="st-body">—</div></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">視点</div>
+    <div class="view-btns">
+      <div class="view-btn active" id="vb-free" onclick="setView('free')">自由</div>
+      <div class="view-btn" id="vb-top" onclick="setView('top')">上面</div>
+      <div class="view-btn" id="vb-side" onclick="setView('side')">側面</div>
+      <div class="view-btn" id="vb-front" onclick="setView('front')">正面</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="spec-note">※ 仕様: Orbbec Femto Bolt Hardware Specifications より<br>※ 黄色ライン = 視野錐台と壁の正確な交差領域<br>※ 右ドラッグでパン移動</div>
+  </div>
+</div>
+
+<div id="main">
+  <canvas id="canvas3d"></canvas>
+  <div id="wall-flash"></div>
+  <div id="mode-tag">NFOV 2×2 BINNED</div>
+  <div id="hud">
+    <div class="hud-tag">H: <span id="hud-h">2500mm</span></div>
+    <div class="hud-tag">TILT: <span id="hud-t">30°</span></div>
+    <div class="hud-tag">FOV: <span id="hud-fov">75°×65°</span></div>
+    <div class="hud-tag">ROOM: <span id="hud-room">6×8×3m</span></div>
+  </div>
+  <div id="legend">
+    <div class="legend-item"><div class="legend-color" style="background:#44aaff55;border:1px solid #44aaff;"></div>視野錐台</div>
+    <div class="legend-item"><div class="legend-color" style="background:#00ff8844;border:1px solid #00ff88;"></div>床面投影（グリーン）</div>
+    <div class="legend-item"><div class="legend-color" style="background:#ffdd0077;border:2px solid #ffdd00;"></div>壁との交差（イエロー）</div>
+    <div class="legend-item"><div class="legend-color" style="background:#fff;"></div>検証対象の人</div>
+  </div>
+  <div id="controls-hint">ドラッグ: 回転 ／ ホイール: ズーム ／ 右ドラッグ: 移動</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ============================================================
+// SENSOR MODES
+// ============================================================
+const MODES={
+  nfov_ub: {name:'NFOV アンビン',     hFov:75, vFov:65, minD:.50,maxD:3.86,spec:'解像度: 640×576 ／ FPS: 5,15,25,30 ／ 露出: 12.8ms'},
+  nfov_2x2:{name:'NFOV 2×2 ビニング', hFov:75, vFov:65, minD:.50,maxD:5.46,spec:'解像度: 320×288 ／ FPS: 5,15,25,30 ／ 露出: 12.8ms'},
+  wfov_2x2:{name:'WFOV 2×2 ビニング', hFov:120,vFov:120,minD:.25,maxD:2.88,spec:'解像度: 512×512 ／ FPS: 5,15,25,30 ／ 露出: 12.8ms'},
+  wfov_ub: {name:'WFOV アンビン',     hFov:120,vFov:120,minD:.25,maxD:2.21,spec:'解像度: 1024×1024 ／ FPS: 5,15,25 ／ 露出: 20.3ms'},
+};
+
+// ============================================================
+// THREE.JS SETUP
+// ============================================================
+const canvas=document.getElementById('canvas3d');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+renderer.setClearColor(0x0b0d14,1);
+const scene=new THREE.Scene();
+scene.fog=new THREE.FogExp2(0x0b0d14,.012);
+const camera=new THREE.PerspectiveCamera(50,1,.01,300);
+scene.add(new THREE.AmbientLight(0x223366,.8));
+const dLight=new THREE.DirectionalLight(0x4488ff,.5);
+dLight.position.set(5,10,5);scene.add(dLight);
+scene.add(new THREE.GridHelper(80,160,0x141e2e,0x0d1520));
+
+// ============================================================
+// STATE
+// ============================================================
+let state={
+  modeKey:'nfov_2x2',height:2.5,tilt:30,rotate:0,
+  stature:1.70,pdist:3.0,poffset:0.0,sx:0.0,sz:0.0,
+  roomW:6,roomD:8,roomH:3,
+  walls:{front:true,back:true,left:true,right:true,ceil:true}
+};
+
+const dynGroup=new THREE.Group();scene.add(dynGroup);
+const roomGroup=new THREE.Group();scene.add(roomGroup);
+
+// ============================================================
+// MATH HELPERS
+// ============================================================
+const d2r=d=>d*Math.PI/180;
+
+function getSensorAxes(tiltDeg,rotateDeg){
+  const t=d2r(tiltDeg),r=d2r(rotateDeg);
+  const fwd=new THREE.Vector3(Math.sin(r)*Math.cos(t),-Math.sin(t),Math.cos(r)*Math.cos(t)).normalize();
+  const right=new THREE.Vector3(Math.cos(r),0,-Math.sin(r));
+  const up=new THREE.Vector3().crossVectors(right,fwd).negate();
+  return{fwd,right,up};
+}
+
+// Get the 8 vertices of the frustum as a convex polyhedron
+// Returns {near:[4 pts], far:[4 pts]} — ordered TL,TR,BR,BL (top-left etc in local space)
+function getFrustumVerts(origin,axes,hFovDeg,vFovDeg,minD,maxD){
+  const hw_n=Math.tan(d2r(hFovDeg/2))*minD, hv_n=Math.tan(d2r(vFovDeg/2))*minD;
+  const hw_f=Math.tan(d2r(hFovDeg/2))*maxD, hv_f=Math.tan(d2r(vFovDeg/2))*maxD;
+  const cn=origin.clone().addScaledVector(axes.fwd,minD);
+  const cf=origin.clone().addScaledVector(axes.fwd,maxD);
+  const near=[
+    cn.clone().addScaledVector(axes.right,-hw_n).addScaledVector(axes.up, hv_n), // TL
+    cn.clone().addScaledVector(axes.right, hw_n).addScaledVector(axes.up, hv_n), // TR
+    cn.clone().addScaledVector(axes.right, hw_n).addScaledVector(axes.up,-hv_n), // BR
+    cn.clone().addScaledVector(axes.right,-hw_n).addScaledVector(axes.up,-hv_n), // BL
+  ];
+  const far=[
+    cf.clone().addScaledVector(axes.right,-hw_f).addScaledVector(axes.up, hv_f),
+    cf.clone().addScaledVector(axes.right, hw_f).addScaledVector(axes.up, hv_f),
+    cf.clone().addScaledVector(axes.right, hw_f).addScaledVector(axes.up,-hv_f),
+    cf.clone().addScaledVector(axes.right,-hw_f).addScaledVector(axes.up,-hv_f),
+  ];
+  return{near,far};
+}
+
+// The 6 faces of the frustum as ordered CCW polygons (viewed from outside)
+function getFrustumFaces(near,far){
+  return[
+    [near[0],near[1],near[2],near[3]], // near cap
+    [far[3],far[2],far[1],far[0]],     // far cap (flipped)
+    [near[0],far[0],far[1],near[1]],   // top
+    [near[2],far[2],far[3],near[3]],   // bottom
+    [near[1],far[1],far[2],near[2]],   // right
+    [near[3],far[3],far[0],near[0]],   // left
+  ];
+}
+
+// ============================================================
+// SUTHERLAND-HODGMAN polygon clipping in 3D
+// Clip a 3D polygon by a half-space defined by plane (normal, d = dot(normal, point_on_plane))
+// "inside" = dot(normal, point) >= planeD
+// ============================================================
+function clipPolyByPlane(poly, planeNormal, planeD){
+  if(poly.length===0) return[];
+  const out=[];
+  for(let i=0;i<poly.length;i++){
+    const a=poly[i], b=poly[(i+1)%poly.length];
+    const da=planeNormal.dot(a)-planeD;
+    const db=planeNormal.dot(b)-planeD;
+    const aIn=da>=-1e-6, bIn=db>=-1e-6;
+    if(aIn) out.push(a.clone());
+    if(aIn!==bIn){
+      // compute intersection
+      const t=da/(da-db);
+      out.push(a.clone().lerp(b,t));
+    }
+  }
+  return out;
+}
+
+// Clip a polygon by all 6 frustum planes, returning the clipped polygon
+function clipPolyByFrustum(poly, origin, axes, hFovDeg, vFovDeg, minD, maxD){
+  const hw=Math.tan(d2r(hFovDeg/2)), hv=Math.tan(d2r(vFovDeg/2));
+  // Frustum planes: each defined by inward-pointing normal and a point on the plane
+  // Near: fwd >= minD  → normal=fwd, d=minD (but dot with fwd)
+  // Far:  fwd <= maxD  → normal=-fwd, d=-maxD
+  // Right: dot(right,dir) <= hw*dot(fwd,dir) → (right - hw*fwd) . pt <= 0  → normal = hw*fwd - right
+  // etc.
+
+  // We'll define planes by (normal, offset) where inside is dot(normal,P) >= offset
+  const planes=[
+    // near
+    {n:axes.fwd.clone(), d:axes.fwd.dot(origin)+minD},
+    // far
+    {n:axes.fwd.clone().negate(), d:-axes.fwd.dot(origin)-maxD},
+    // right side: -right + hw*fwd inward
+    {n:axes.fwd.clone().multiplyScalar(hw).sub(axes.right), d:(axes.fwd.clone().multiplyScalar(hw).sub(axes.right)).dot(origin)},
+    // left side
+    {n:axes.fwd.clone().multiplyScalar(hw).add(axes.right), d:(axes.fwd.clone().multiplyScalar(hw).add(axes.right)).dot(origin)},
+    // top side: fwd*hv - up inward
+    {n:axes.fwd.clone().multiplyScalar(hv).sub(axes.up), d:(axes.fwd.clone().multiplyScalar(hv).sub(axes.up)).dot(origin)},
+    // bottom side
+    {n:axes.fwd.clone().multiplyScalar(hv).add(axes.up), d:(axes.fwd.clone().multiplyScalar(hv).add(axes.up)).dot(origin)},
+  ];
+
+  let result=poly.map(p=>p.clone());
+  for(const pl of planes){
+    result=clipPolyByPlane(result,pl.n,pl.d);
+    if(result.length===0) return[];
+  }
+  return result;
+}
+
+// ============================================================
+// WALL-FRUSTUM INTERSECTION
+// For each room wall, compute the intersection polygon with the frustum
+// Method: start with the wall rectangle, clip by all 6 frustum half-spaces
+// ============================================================
+function computeWallIntersections(origin, axes, hFov, vFov, minD, maxD, W, D, H){
+  // Wall rectangles as ordered 3D polygons
+  const wallDefs=[
+    {name:'floor', pts:[new THREE.Vector3(0,0,0),new THREE.Vector3(W,0,0),new THREE.Vector3(W,0,D),new THREE.Vector3(0,0,D)]},
+    {name:'ceil',  pts:[new THREE.Vector3(0,H,0),new THREE.Vector3(0,H,D),new THREE.Vector3(W,H,D),new THREE.Vector3(W,H,0)]},
+    {name:'back',  pts:[new THREE.Vector3(0,0,0),new THREE.Vector3(0,H,0),new THREE.Vector3(W,H,0),new THREE.Vector3(W,0,0)]},
+    {name:'front', pts:[new THREE.Vector3(0,0,D),new THREE.Vector3(W,0,D),new THREE.Vector3(W,H,D),new THREE.Vector3(0,H,D)]},
+    {name:'left',  pts:[new THREE.Vector3(0,0,0),new THREE.Vector3(0,0,D),new THREE.Vector3(0,H,D),new THREE.Vector3(0,H,0)]},
+    {name:'right', pts:[new THREE.Vector3(W,0,0),new THREE.Vector3(W,H,0),new THREE.Vector3(W,H,D),new THREE.Vector3(W,0,D)]},
+  ];
+
+  const results={};
+  wallDefs.forEach(wd=>{
+    const clipped=clipPolyByFrustum(wd.pts, origin, axes, hFov, vFov, minD, maxD);
+    results[wd.name]=clipped.length>=3?clipped:null;
+  });
+  return results;
+}
+
+// ============================================================
+// THREE.JS DRAW HELPERS
+// ============================================================
+function clearGroup(g){
+  while(g.children.length){
+    const o=g.children[0];
+    o.geometry&&o.geometry.dispose();
+    if(o.material){o.material.map&&o.material.map.dispose();o.material.dispose();}
+    g.remove(o);
+  }
+}
+
+function addLine(g,a,b,color,opacity=0.85){
+  const geo=new THREE.BufferGeometry().setFromPoints([a,b]);
+  g.add(new THREE.Line(geo,new THREE.LineBasicMaterial({color,transparent:true,opacity})));
+}
+
+function addLoop(g,pts,color,opacity=1.0){
+  if(pts.length<2)return;
+  const geo=new THREE.BufferGeometry().setFromPoints([...pts,pts[0]]);
+  g.add(new THREE.Line(geo,new THREE.LineBasicMaterial({color,transparent:true,opacity})));
+}
+
+function addFill(g,pts,color,opacity){
+  if(pts.length<3)return;
+  const verts=[];
+  for(let i=1;i<pts.length-1;i++){
+    verts.push(pts[0].x,pts[0].y,pts[0].z,pts[i].x,pts[i].y,pts[i].z,pts[i+1].x,pts[i+1].y,pts[i+1].z);
+  }
+  const geo=new THREE.BufferGeometry();
+  geo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(verts),3));
+  g.add(new THREE.Mesh(geo,new THREE.MeshBasicMaterial({color,transparent:true,opacity,side:THREE.DoubleSide,depthWrite:false})));
+}
+
+function makeSprite(g,text,pos,color,scale=1){
+  const c=document.createElement('canvas');c.width=256;c.height=64;
+  const ctx=c.getContext('2d');ctx.font='bold 26px monospace';ctx.fillStyle=color;
+  ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(text,128,32);
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c),transparent:true}));
+  sp.position.copy(pos);sp.scale.set(2*scale,.5*scale,1);g.add(sp);
+}
+
+// ============================================================
+// ROOM MESH
+// ============================================================
+function rebuildRoom(){
+  clearGroup(roomGroup);
+  const W=state.roomW,D=state.roomD,H=state.roomH;
+  const wallMat=()=>new THREE.MeshPhongMaterial({color:0x1a2540,transparent:true,opacity:.12,side:THREE.DoubleSide,depthWrite:false});
+  const edgeMat=()=>new THREE.LineBasicMaterial({color:0x2a4070,transparent:true,opacity:.55});
+
+  const panels=[
+    {show:true,            pos:[W/2,0,D/2],  sz:[W,D],   rx:-Math.PI/2,ry:0},
+    {show:state.walls.ceil, pos:[W/2,H,D/2],  sz:[W,D],   rx:Math.PI/2,ry:0},
+    {show:state.walls.back, pos:[W/2,H/2,0],  sz:[W,H],   rx:0,ry:0},
+    {show:state.walls.front,pos:[W/2,H/2,D],  sz:[W,H],   rx:0,ry:Math.PI},
+    {show:state.walls.left, pos:[0,H/2,D/2],  sz:[D,H],   rx:0,ry:Math.PI/2},
+    {show:state.walls.right,pos:[W,H/2,D/2],  sz:[D,H],   rx:0,ry:-Math.PI/2},
+  ];
+  panels.forEach(({show,pos,sz,rx,ry})=>{
+    if(!show)return;
+    const m=new THREE.Mesh(new THREE.PlaneGeometry(sz[0],sz[1]),wallMat());
+    m.position.set(...pos);m.rotation.set(rx,ry,0);roomGroup.add(m);
+  });
+
+  // Box edges
+  const cv=[[0,0,0],[W,0,0],[W,0,D],[0,0,D],[0,H,0],[W,H,0],[W,H,D],[0,H,D]].map(c=>new THREE.Vector3(...c));
+  [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]].forEach(([a,b])=>{
+    const geo=new THREE.BufferGeometry().setFromPoints([cv[a],cv[b]]);
+    roomGroup.add(new THREE.Line(geo,edgeMat()));
+  });
+
+  document.getElementById('hud-room').textContent=`${W}×${D}×${H}m`;
+}
+
+// ============================================================
+// MAIN REBUILD
+// ============================================================
+function rebuild(){
+  clearGroup(dynGroup);
+
+  const mode=MODES[state.modeKey];
+  const{hFov,vFov,minD,maxD}=mode;
+  const H=state.height;
+  const sPos=new THREE.Vector3(state.sx,H,state.sz);
+  const axes=getSensorAxes(state.tilt,state.rotate);
+
+  // --- Sensor hardware ---
+  const sMesh=new THREE.Mesh(new THREE.BoxGeometry(.18,.10,.10),new THREE.MeshPhongMaterial({color:0xffcc33,emissive:0x443300}));
+  sMesh.position.copy(sPos);
+  const q=new THREE.Quaternion();
+  new THREE.Matrix4().lookAt(sPos,sPos.clone().add(axes.fwd),new THREE.Vector3(0,1,0)).decompose(new THREE.Vector3(),q,new THREE.Vector3());
+  sMesh.quaternion.copy(q);dynGroup.add(sMesh);
+
+  const glow=new THREE.Mesh(new THREE.SphereGeometry(.08,8,8),new THREE.MeshBasicMaterial({color:0x00d4ff,transparent:true,opacity:.3}));
+  glow.position.copy(sPos);dynGroup.add(glow);
+
+  const pole=new THREE.Mesh(new THREE.CylinderGeometry(.025,.025,H,8),new THREE.MeshPhongMaterial({color:0x2244aa,emissive:0x111133}));
+  pole.position.set(sPos.x,H/2,sPos.z);dynGroup.add(pole);
+
+  const base=new THREE.Mesh(new THREE.CylinderGeometry(.15,.2,.05,12),new THREE.MeshPhongMaterial({color:0x1a2a4a}));
+  base.position.set(sPos.x,.025,sPos.z);dynGroup.add(base);
+
+  makeSprite(dynGroup,`H:${Math.round(H*1000)}mm`,new THREE.Vector3(sPos.x-.9,H/2,sPos.z),'#8899bb',.7);
+  addLine(dynGroup,new THREE.Vector3(sPos.x-.35,0,sPos.z),new THREE.Vector3(sPos.x-.35,H,sPos.z),0x334466,.5);
+
+  // --- Frustum ---
+  const{near,far}=getFrustumVerts(sPos,axes,hFov,vFov,minD,maxD);
+
+  // Wireframe
+  for(let i=0;i<4;i++) addLine(dynGroup,near[i],near[(i+1)%4],0x44aaff,.75);
+  for(let i=0;i<4;i++) addLine(dynGroup,far[i], far[(i+1)%4], 0x44aaff,.6);
+  for(let i=0;i<4;i++) addLine(dynGroup,near[i],far[i],0x44aaff,.4);
+  for(let i=0;i<4;i++) addLine(dynGroup,sPos,near[i],0x2266aa,.3);
+
+  // Transparent face fills
+  const faces=getFrustumFaces(near,far);
+  faces.forEach(f=>addFill(dynGroup,f,0x44aaff,.035));
+
+  // --- Floor projection (exact: clip floor quad by frustum) ---
+  const floorPoly=[
+    new THREE.Vector3(-50,0,-50),new THREE.Vector3(50,0,-50),
+    new THREE.Vector3(50,0,50),new THREE.Vector3(-50,0,50)
+  ];
+  const floorClipped=clipPolyByFrustum(floorPoly,sPos,axes,hFov,vFov,minD,maxD);
+  if(floorClipped.length>=3){
+    const lifted=floorClipped.map(p=>new THREE.Vector3(p.x,.015,p.z));
+    addFill(dynGroup,lifted,0x00ff88,.15);
+    addLoop(dynGroup,lifted,0x00ff88,.85);
+  }
+
+  // Near plane edge on floor
+  const nearFloorPts=near.map(p=>{
+    const dir=p.clone().sub(sPos).normalize();
+    if(dir.y>=0)return null;
+    const t=-sPos.y/dir.y;
+    return sPos.clone().addScaledVector(dir,t);
+  }).filter(Boolean);
+  if(nearFloorPts.length>=2){
+    for(let i=0;i<nearFloorPts.length;i++){
+      const a=nearFloorPts[i],b=nearFloorPts[(i+1)%nearFloorPts.length];
+      addLine(dynGroup,new THREE.Vector3(a.x,.02,a.z),new THREE.Vector3(b.x,.02,b.z),0xffaa00,.8);
+    }
+  }
+
+  // --- Stats ---
+  let depthRange='—',widthStr='—',nearStr='—',farStr='—',bodyStr='—';
+  if(floorClipped.length>=2){
+    const sxz=new THREE.Vector2(sPos.x,sPos.z);
+    let mnD=Infinity,mxD=0;
+    floorClipped.forEach(p=>{const d=new THREE.Vector2(p.x,p.z).distanceTo(sxz);mnD=Math.min(mnD,d);mxD=Math.max(mxD,d);});
+    nearStr=mnD.toFixed(1)+'m';farStr=mxD.toFixed(1)+'m';depthRange=(mxD-mnD).toFixed(1)+'m';
+    widthStr=(2*Math.tan(d2r(hFov/2))*((mnD+mxD)/2)).toFixed(1)+'m';
+    bodyStr=nearStr+'〜'+farStr;
+  }else{
+    nearStr=minD+'m';farStr=maxD+'m';
+    widthStr=(2*Math.tan(d2r(hFov/2))*((minD+maxD)/2)).toFixed(1)+'m';
+    bodyStr=minD+'m〜'+maxD+'m';
+  }
+  ['depth','width','near','far','body'].forEach((k,i)=>{
+    document.getElementById('st-'+k).textContent=[depthRange,widthStr,nearStr,farStr,bodyStr][i];
+  });
+
+  // --- Wall intersections (exact polygon clipping) ---
+  const wallHits=computeWallIntersections(sPos,axes,hFov,vFov,minD,maxD,state.roomW,state.roomD,state.roomH);
+  const hitSet=new Set();
+
+  Object.entries(wallHits).forEach(([name,poly])=>{
+    if(!poly||poly.length<3)return;
+    if(name!=='floor'&&!state.walls[name])return;
+    hitSet.add(name);
+
+    // Offset slightly away from wall to avoid z-fighting
+    const offsets={floor:[0,.02,0],ceil:[0,-.02,0],back:[0,0,.02],front:[0,0,-.02],left:[.02,0,0],right:[-.02,0,0]};
+    const off=offsets[name]||[0,0,0];
+    const lifted=poly.map(p=>new THREE.Vector3(p.x+off[0],p.y+off[1],p.z+off[2]));
+
+    addFill(dynGroup,lifted,0xffdd00,.2);
+    addLoop(dynGroup,lifted,0xffdd00,1.0);
+  });
+
+  // Badge & flash update
+  ['front','back','left','right','ceil','floor'].forEach(n=>{
+    document.getElementById('badge-'+n).className='wall-badge '+(hitSet.has(n)?'hit':'nohit');
+  });
+  document.getElementById('wall-flash').className=hitSet.size>0?'hit':'';
+
+  // --- Person ---
+  const pX=sPos.x+state.poffset,pZ=sPos.z+state.pdist,pH=state.stature;
+  const bH=pH*.85,hR=pH*.09;
+  const bMesh=new THREE.Mesh(new THREE.CylinderGeometry(.12,.14,bH,8),new THREE.MeshPhongMaterial({color:0xddddff,emissive:0x111133}));
+  bMesh.position.set(pX,bH/2,pZ);dynGroup.add(bMesh);
+  const hMesh=new THREE.Mesh(new THREE.SphereGeometry(hR,10,10),new THREE.MeshPhongMaterial({color:0xffddbb,emissive:0x221100}));
+  hMesh.position.set(pX,bH+hR,pZ);dynGroup.add(hMesh);
+  addLine(dynGroup,sPos,new THREE.Vector3(pX,pH*.5,pZ),0x334466,.3);
+
+  function isInFrustum(pt){
+    const toP=pt.clone().sub(sPos);
+    const dF=toP.dot(axes.fwd);if(dF<minD||dF>maxD)return false;
+    const dR=Math.abs(toP.dot(axes.right));
+    const dU=Math.abs(toP.dot(axes.up));
+    return dR<=Math.tan(d2r(hFov/2))*dF && dU<=Math.tan(d2r(vFov/2))*dF;
+  }
+  const topV=isInFrustum(new THREE.Vector3(pX,pH,pZ));
+  const botV=isInFrustum(new THREE.Vector3(pX,0,pZ));
+  const midV=isInFrustum(new THREE.Vector3(pX,pH/2,pZ));
+  let status='hidden',st='センサー範囲外',dc='red';
+  if(topV&&botV){status='visible';st='全身がセンサー範囲内';dc='green';}
+  else if(topV||botV||midV){status='partial';st='部分的に範囲内（一部検知）';dc='amber';}
+  const sEl=document.getElementById('person-status');
+  sEl.className=status;sEl.innerHTML=`<div class="dot ${dc}"></div><span>${st}</span>`;
+
+  const iC=status==='visible'?0x00ff88:status==='partial'?0xffaa00:0xff4466;
+  const iCS=status==='visible'?'#00ff88':status==='partial'?'#ffaa00':'#ff4466';
+  addLine(dynGroup,new THREE.Vector3(pX+.25,0,pZ),new THREE.Vector3(pX+.25,pH,pZ),iC,.9);
+  const dMesh=new THREE.Mesh(new THREE.SphereGeometry(.06,6,6),new THREE.MeshBasicMaterial({color:iC}));
+  dMesh.position.set(pX,pH+.06,pZ);dynGroup.add(dMesh);
+  makeSprite(dynGroup,`${state.pdist.toFixed(1)}m`,new THREE.Vector3(pX,pH+.35,pZ),iCS,.75);
+  addLine(dynGroup,new THREE.Vector3(sPos.x,.03,sPos.z),new THREE.Vector3(pX,.03,pZ),0x334466,.5);
+
+  // Distance rings
+  for(let r=1;r<=Math.ceil(maxD)+1;r++){
+    const pts=[];
+    for(let a=0;a<=64;a++){const ang=(a/64)*Math.PI*2;pts.push(new THREE.Vector3(sPos.x+Math.cos(ang)*r,.01,sPos.z+Math.sin(ang)*r));}
+    dynGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),
+      new THREE.LineBasicMaterial({color:r<=minD?0xff4466:r>maxD?0x332222:0x1a2e4a,transparent:true,opacity:.35})));
+  }
+
+  // HUD
+  document.getElementById('hud-h').textContent=Math.round(H*1000)+'mm';
+  document.getElementById('hud-t').textContent=state.tilt+'°';
+  document.getElementById('hud-fov').textContent=`${hFov}°×${vFov}°`;
+  document.getElementById('mode-tag').textContent=mode.name.toUpperCase();
+  document.getElementById('spec-note').textContent=mode.spec;
+}
+
+// ============================================================
+// ORBIT CAMERA
+// ============================================================
+let isDragging=false,isRight=false,prevX=0,prevY=0;
+let theta=0.8,phi=0.65,radius=18;
+let target=new THREE.Vector3(3,0,4);
+function updateCamera(){
+  camera.position.set(
+    target.x+radius*Math.sin(phi)*Math.sin(theta),
+    target.y+radius*Math.cos(phi),
+    target.z+radius*Math.sin(phi)*Math.cos(theta)
+  );camera.lookAt(target);
+}updateCamera();
+
+const mainEl=document.getElementById('main');
+mainEl.addEventListener('contextmenu',e=>e.preventDefault());
+mainEl.addEventListener('mousedown',e=>{isDragging=true;isRight=e.button===2;prevX=e.clientX;prevY=e.clientY;});
+window.addEventListener('mouseup',()=>isDragging=false);
+window.addEventListener('mousemove',e=>{
+  if(!isDragging)return;
+  const dx=e.clientX-prevX,dy=e.clientY-prevY;
+  if(isRight){
+    const ps=radius*.001;
+    const r=new THREE.Vector3().crossVectors(camera.getWorldDirection(new THREE.Vector3()),camera.up).normalize();
+    target.addScaledVector(r,-dx*ps);target.y+=dy*ps;
+  }else{
+    theta-=dx*.007;phi=Math.max(.05,Math.min(Math.PI*.48,phi-dy*.007));
+  }
+  prevX=e.clientX;prevY=e.clientY;updateCamera();
+});
+mainEl.addEventListener('wheel',e=>{radius=Math.max(2,Math.min(60,radius+e.deltaY*.02));updateCamera();e.preventDefault();},{passive:false});
+let lastT=[];
+mainEl.addEventListener('touchstart',e=>{lastT=Array.from(e.touches);});
+mainEl.addEventListener('touchmove',e=>{
+  if(e.touches.length===1&&lastT.length===1){
+    theta-=(e.touches[0].clientX-lastT[0].clientX)*.008;
+    phi=Math.max(.05,Math.min(Math.PI*.48,phi-(e.touches[0].clientY-lastT[0].clientY)*.008));
+    updateCamera();
+  }else if(e.touches.length===2&&lastT.length===2){
+    const d0=Math.hypot(lastT[0].clientX-lastT[1].clientX,lastT[0].clientY-lastT[1].clientY);
+    const d1=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+    radius=Math.max(2,Math.min(60,radius*(d0/d1)));updateCamera();
+  }
+  lastT=Array.from(e.touches);e.preventDefault();
+},{passive:false});
+
+function setView(v){
+  document.querySelectorAll('.view-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('vb-'+v).classList.add('active');
+  switch(v){
+    case'top':theta=.01;phi=.05;radius=20;target.set(3,0,4);break;
+    case'side':theta=Math.PI/2;phi=.5;radius=18;target.set(3,0,4);break;
+    case'front':theta=.01;phi=.5;radius=18;target.set(3,0,4);break;
+    case'free':theta=0.8;phi=.65;radius=18;target.set(3,0,4);break;
+  }updateCamera();
+}
+
+// ============================================================
+// INPUT BINDINGS
+// ============================================================
+document.getElementById('sl-height').addEventListener('input',function(){state.height=parseFloat(this.value)/1000;document.getElementById('val-height').textContent=this.value+' mm';rebuild();});
+document.getElementById('sl-tilt').addEventListener('input',function(){state.tilt=parseInt(this.value);document.getElementById('val-tilt').textContent=this.value+'°';rebuild();});
+document.getElementById('sl-rotate').addEventListener('input',function(){state.rotate=parseInt(this.value);document.getElementById('val-rotate').textContent=this.value+'°';rebuild();});
+document.getElementById('sl-sx').addEventListener('input',function(){state.sx=parseFloat(this.value);document.getElementById('val-sx').textContent=parseFloat(this.value).toFixed(1)+' m';rebuild();});
+document.getElementById('sl-sz').addEventListener('input',function(){state.sz=parseFloat(this.value);document.getElementById('val-sz').textContent=parseFloat(this.value).toFixed(1)+' m';rebuild();});
+document.getElementById('sl-stature').addEventListener('input',function(){state.stature=parseInt(this.value)/100;document.getElementById('val-stature').textContent=this.value+' cm';rebuild();});
+document.getElementById('sl-pdist').addEventListener('input',function(){state.pdist=parseFloat(this.value);document.getElementById('val-pdist').textContent=parseFloat(this.value).toFixed(1)+' m';rebuild();});
+document.getElementById('sl-poffset').addEventListener('input',function(){state.poffset=parseFloat(this.value);document.getElementById('val-poffset').textContent=parseFloat(this.value).toFixed(1)+' m';rebuild();});
+document.getElementById('sel-mode').addEventListener('change',function(){state.modeKey=this.value;rebuild();});
+['w','d','h'].forEach(k=>{
+  document.getElementById('room-'+k).addEventListener('input',function(){
+    if(k==='w')state.roomW=parseFloat(this.value)||6;
+    if(k==='d')state.roomD=parseFloat(this.value)||8;
+    if(k==='h')state.roomH=parseFloat(this.value)||3;
+    rebuildRoom();rebuild();
+  });
+});
+['front','back','left','right','ceil'].forEach(n=>{
+  document.getElementById('chk-'+n).addEventListener('change',function(){
+    state.walls[n]=this.checked;
+    document.getElementById('lbl-'+n).classList.toggle('on',this.checked);
+    rebuildRoom();rebuild();
+  });
+});
+
+function onResize(){const w=mainEl.clientWidth,h=mainEl.clientHeight;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();}
+window.addEventListener('resize',onResize);onResize();
+
+function animate(){requestAnimationFrame(animate);renderer.render(scene,camera);}
+rebuildRoom();rebuild();animate();
+</script>
+</body>
+</html>
